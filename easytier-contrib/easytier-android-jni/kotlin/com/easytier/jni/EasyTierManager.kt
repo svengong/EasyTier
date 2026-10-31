@@ -6,13 +6,18 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.squareup.moshi.Moshi
-import com.squareup.wire.WireJsonAdapterFactory
-import common.Ipv4Inet
-import web.NetworkInstanceRunningInfoMap
+import com.squareup.moshi.Types
 
-fun parseIpv4InetToString(inet: Ipv4Inet?): String? {
-    val addr = inet?.address?.addr ?: return null
-    val networkLength = inet.network_length
+/**
+ * [PATCH] 从 protobuf JSON 的 virtual_ipv4 对象解析出 "ip/prefix"。
+ *
+ * 原始实现依赖 Square Wire 生成的 Kotlin 数据类（可属性访问）。
+ * 这里改为直接读 Map，不依赖代码生成产物，便于在 Tauri 工程里编译。
+ */
+fun parseIpv4InetToString(inet: Map<String, Any?>?): String? {
+    val addrObj = inet?.get("address") as? Map<*, *> ?: return null
+    val addr = (addrObj["addr"] as? Number)?.toInt() ?: return null
+    val networkLength = (inet["network_length"] as? Number)?.toInt() ?: 24
 
     // 将 int32 转换为 IPv4 字符串
     val ip =
@@ -45,8 +50,11 @@ class EasyTierManager(
     private var vpnServiceIntent: Intent? = null
 
     // JSON 解析器
-    private val moshi = Moshi.Builder().add(WireJsonAdapterFactory()).build()
-    private val adapter = moshi.adapter(NetworkInstanceRunningInfoMap::class.java)
+    private val moshi = Moshi.Builder().build()
+    private val adapter =
+            moshi.adapter<Map<String, Any?>>(
+                    Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java)
+            )
 
     // 监控任务
     private val monitorRunnable =
@@ -123,7 +131,11 @@ class EasyTierManager(
             }
 
             val networkInfoMap = parseNetworkInfo(infosJson)
-            val networkInfo = networkInfoMap?.map?.get(instanceName)
+            @Suppress("UNCHECKED_CAST")
+            val instanceMap =
+                    (networkInfoMap?.get("map") as? Map<String, Any?>) ?: emptyMap<String, Any?>()
+            @Suppress("UNCHECKED_CAST")
+            val networkInfo = instanceMap[instanceName] as? Map<String, Any?>
 
             if (networkInfo == null) {
                 Log.d(TAG, "未找到实例 $instanceName 的网络信息")
@@ -133,12 +145,15 @@ class EasyTierManager(
             Log.d(TAG, "网络信息: $networkInfo")
 
             // 检查实例是否正在运行
-            if (!networkInfo.running) {
-                Log.w(TAG, "EasyTier 实例未运行: ${networkInfo.error_msg}")
+            if (networkInfo["running"] != true) {
+                Log.w(TAG, "EasyTier 实例未运行: ${networkInfo["error_msg"]}")
                 return
             }
 
-            val newIpv4Inet = networkInfo.my_node_info?.virtual_ipv4
+            @Suppress("UNCHECKED_CAST")
+            val myNodeInfo = networkInfo["my_node_info"] as? Map<String, Any?>
+            @Suppress("UNCHECKED_CAST")
+            val newIpv4Inet = myNodeInfo?.get("virtual_ipv4") as? Map<String, Any?>
 
             if (newIpv4Inet == null) {
                 Log.w(TAG, "EasyTier No Ipv4: $networkInfo")
@@ -150,8 +165,20 @@ class EasyTierManager(
 
             // 获取所有节点的 proxy_cidrs
             val newProxyCidrs = mutableListOf<String>()
-            networkInfo.routes?.forEach { route ->
-                route.proxy_cidrs?.let { cidrs -> newProxyCidrs.addAll(cidrs) }
+            @Suppress("UNCHECKED_CAST")
+            (networkInfo["routes"] as? List<Map<String, Any?>>)?.forEach { route ->
+                @Suppress("UNCHECKED_CAST")
+                (route["proxy_cidrs"] as? List<String>)?.let { cidrs -> newProxyCidrs.addAll(cidrs) }
+            }
+
+            // [PATCH] 全流量接管：若本实例配置了 exit_nodes，则把默认路由也声明给 VPN。
+            //
+            // 原实现只读 proxy_cidrs，导致 exit_nodes 配置形同虚设（issue #1701）。
+            // 只有让 VpnService 调用 addRoute("0.0.0.0", 0)，系统才会把全部流量
+            // 交给 tun；在此之前，exit_nodes 仅影响 EasyTier 内部路由决策。
+            if (exitNodesConfigured() && !newProxyCidrs.contains("0.0.0.0/0")) {
+                newProxyCidrs.add("0.0.0.0/0")
+                Log.i(TAG, "检测到 exit_nodes，启用全流量接管")
             }
 
             // 检查是否有变化
@@ -180,12 +207,38 @@ class EasyTierManager(
     }
 
     /** 解析网络信息 JSON */
-    private fun parseNetworkInfo(jsonString: String): NetworkInstanceRunningInfoMap? {
+    private fun parseNetworkInfo(jsonString: String): Map<String, Any?>? {
         return try {
             adapter.fromJson(jsonString)
         } catch (e: Exception) {
             Log.e(TAG, "解析网络信息失败", e)
             null
+        }
+    }
+
+    /**
+     * [PATCH] 判断当前实例配置里是否声明了 exit_nodes。
+     *
+     * 配置形如：
+     * ```toml
+     * exit_nodes = ["10.144.144.1"]
+     * ```
+     *
+     * 这里只做轻量字符串匹配，不引入 TOML 解析依赖。匹配规则：
+     * 存在顶层 `exit_nodes` 且等号右侧的数组非空。
+     */
+    private fun exitNodesConfigured(): Boolean {
+        return try {
+            val line = networkConfig
+                .lineSequence()
+                .firstOrNull { it.trimStart().startsWith("exit_nodes") }
+                ?: return false
+            // 取等号右侧，判断是否有引号包裹的非空元素
+            val rhs = line.substringAfter("=", "")
+            Regex("\"([^\"]+)\"").findAll(rhs).any { it.groupValues[1].isNotBlank() }
+        } catch (e: Exception) {
+            Log.w(TAG, "解析 exit_nodes 失败", e)
+            false
         }
     }
 
