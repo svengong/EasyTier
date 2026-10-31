@@ -467,6 +467,94 @@ static DOH_RESOLVERS: Lazy<
     std::sync::Mutex<std::collections::HashMap<String, Arc<TokioResolver>>>,
 > = Lazy::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
 
+/// [PATCH] DoH 解析结果缓存：(host:port) → (地址列表, 过期时间)。
+///
+/// 避免每次建连都发起 DoH 查询。隧道重连间隔默认为 1 秒，
+/// 无缓存时断线期间会持续产生 DoH 请求。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+static DOH_RESULT_CACHE: Lazy<
+    std::sync::Mutex<std::collections::HashMap<String, (Vec<SocketAddr>, std::time::Instant)>>,
+> = Lazy::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+/// [PATCH] DoH 解析结果缓存时长。
+///
+/// 与公网 IP 变更频率权衡：太长会导致 IP 变化后长时间连不上，
+/// 太短则失去缓存意义。带 TTL 的 DoH 响应本身通常在分钟级。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+const DEFAULT_DOH_RESULT_TTL: Duration = Duration::from_secs(300);
+
+/// [PATCH] 当前生效的缓存时长，由配置项 peer_doh_cache_ttl 设置。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+static DOH_RESULT_TTL: Lazy<std::sync::RwLock<Duration>> =
+    Lazy::new(|| std::sync::RwLock::new(DEFAULT_DOH_RESULT_TTL));
+
+/// [PATCH] 设置缓存时长。传 0 表示使用默认值。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+pub fn set_doh_cache_ttl(secs: u32) {
+    let ttl = if secs == 0 {
+        DEFAULT_DOH_RESULT_TTL
+    } else {
+        Duration::from_secs(secs as u64)
+    };
+    let mut guard = DOH_RESULT_TTL
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if *guard != ttl {
+        tracing::info!(?ttl, "doh cache ttl updated");
+        *guard = ttl;
+        drop(guard);
+        clear_doh_cache();
+    }
+}
+
+/// [PATCH] 读取缓存结果（未过期时返回）。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+fn doh_cache_get(key: &str) -> Option<Vec<SocketAddr>> {
+    let cache = DOH_RESULT_CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    match cache.get(key) {
+        Some((addrs, deadline)) if std::time::Instant::now() < *deadline => {
+            tracing::debug!(key, ?addrs, "doh result cache hit");
+            Some(addrs.clone())
+        }
+        Some(_) => {
+            tracing::debug!(key, "doh result cache expired");
+            None
+        }
+        None => None,
+    }
+}
+
+/// [PATCH] 写入缓存。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+fn doh_cache_put(key: String, addrs: Vec<SocketAddr>) {
+    if addrs.is_empty() {
+        return;
+    }
+    let mut cache = DOH_RESULT_CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let ttl = *DOH_RESULT_TTL
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    cache.insert(key, (addrs, std::time::Instant::now() + ttl));
+}
+
+/// [PATCH] 清空 DoH 结果缓存（DoH 服务器地址变更时调用）。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+pub fn clear_doh_cache() {
+    DOH_RESULT_CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clear();
+    DOH_RESOLVERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clear();
+    tracing::info!("doh caches cleared");
+}
+
 /// [PATCH] 全局 DoH 服务器地址。
 ///
 /// 由实例启动时通过 [`set_peer_doh_server`] 设置。为空表示不启用 DoH，
@@ -489,6 +577,9 @@ pub fn set_peer_doh_server(server: Option<String>) {
     if *guard != normalized {
         tracing::info!(?normalized, "peer doh server updated");
         *guard = normalized;
+        drop(guard);
+        // 服务器变更后旧结果与旧连接池均失效
+        clear_doh_cache();
     }
 }
 
@@ -564,6 +655,11 @@ async fn doh_resolver_for(server: &str) -> Result<Arc<TokioResolver>, Error> {
 /// [PATCH] 使用 DoH 解析主机名。
 #[cfg(all(feature = "dns-resolver", feature = "doh"))]
 async fn resolve_via_doh(host: &str, port: u16, server: &str) -> Result<Vec<SocketAddr>, Error> {
+    let cache_key = format!("{host}:{port}");
+    if let Some(addrs) = doh_cache_get(&cache_key) {
+        return Ok(addrs);
+    }
+
     let resolver = doh_resolver_for(server).await?;
     let ips = resolver.lookup_ip(host).await.with_context(|| {
         format!("doh lookup failed, host: {host}, server: {server}")
@@ -572,7 +668,11 @@ async fn resolve_via_doh(host: &str, port: u16, server: &str) -> Result<Vec<Sock
         .iter()
         .map(|ip| SocketAddr::new(ip, port))
         .collect::<Vec<_>>();
+    if addrs.is_empty() {
+        return Ok(addrs);
+    }
     tracing::debug!(?addrs, host, server, "doh lookup done");
+    doh_cache_put(cache_key, addrs.clone());
     Ok(addrs)
 }
 

@@ -115,6 +115,9 @@ message NetworkConfig {
   // 为空时沿用系统 DNS（可能被污染）。
   // 例：https://doh.pub/dns-query
   optional string peer_doh_server = 74;
+
+  // [PATCH] DoH 解析结果缓存时长（秒）。0 表示使用默认值 300。
+  optional uint32 peer_doh_cache_ttl = 75;
 }
 
 message ManagedCredentialConfig {

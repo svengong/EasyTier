@@ -296,6 +296,11 @@ peer_doh_server_help: |-
   Resolve domains in initial nodes via DoH.
   Leave empty to use the system DNS (on phones this may be poisoned by the carrier, resolving to wrong addresses).
   Only applies when the address is a domain; not needed if you use a raw IP.
+peer_doh_cache_ttl: DoH Cache TTL (s)
+peer_doh_cache_ttl_help: |-
+  How long to cache DoH results. Empty or 0 uses the default 300 seconds.
+  Public IPs may change; a long cache can delay reconnection.
+peer_doh_cache_ttl_placeholder: Leave blank for 300
 peer_doh_server_placeholder: e.g. https://doh.pub/dns-query
 dns_placeholder: e.g. 192.168.31.1
 

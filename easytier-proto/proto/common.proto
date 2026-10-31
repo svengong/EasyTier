@@ -96,6 +96,10 @@ message FlagsInConfig {
   // 为空时沿用系统 DNS 解析（可能被污染）。
   // 例：https://doh.pub/dns-query
   string peer_doh_server = 46;
+
+  // [PATCH] DoH 解析结果缓存时长（秒）。0 表示使用默认值 300。
+  // 公网 IP 可能变化，过长的缓存会导致变更后长时间连不上。
+  uint32 peer_doh_cache_ttl = 47;
 }
 
 message RpcDescriptor {

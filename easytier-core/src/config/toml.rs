@@ -58,6 +58,8 @@ pub fn gen_default_flags() -> Flags {
         dns: "".to_string(),
         // [PATCH] DoH 服务器，默认不启用（沿用系统 DNS 解析 peer 域名）
         peer_doh_server: "".to_string(),
+        // [PATCH] DoH 缓存时长，0 表示使用默认值 300 秒
+        peer_doh_cache_ttl: 0,
         private_mode: false,
         enable_quic_proxy: false,
         disable_quic_input: false,

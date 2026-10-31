@@ -295,6 +295,11 @@ peer_doh_server_help: |-
   解析 initial nodes 中的域名时优先使用 DoH。
   留空则沿用系统 DNS（手机上可能被运营商污染，导致解析到错误地址）。
   仅在地址为域名时生效；直接填 IP 不需要此项。
+peer_doh_cache_ttl: DoH 缓存时长（秒）
+peer_doh_cache_ttl_help: |-
+  DoH 解析结果缓存多久。留空或填 0 使用默认 300 秒。
+  公网 IP 可能变化，缓存过长会导致变更后长时间连不上。
+peer_doh_cache_ttl_placeholder: 留空为 300
 peer_doh_server_placeholder: 如 https://doh.pub/dns-query
 dns_placeholder: 如 192.168.31.1
 

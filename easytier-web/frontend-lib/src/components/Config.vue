@@ -516,6 +516,19 @@ function removeVpnPortalClient(index: number) {
                 </div>
               </div>
 
+              <!-- DoH 缓存时长 -->
+              <div class="flex flex-row gap-x-9 flex-wrap">
+                <div class="flex flex-col gap-2 basis-5/12 grow">
+                  <div class="flex">
+                    <label for="peer_doh_cache_ttl">{{ t('peer_doh_cache_ttl') }}</label>
+                    <span class="pi pi-question-circle ml-2 self-center"
+                      v-tooltip="t('peer_doh_cache_ttl_help')"></span>
+                  </div>
+                  <InputNumber id="peer_doh_cache_ttl" v-model="curNetwork.peer_doh_cache_ttl"
+                    :placeholder="t('peer_doh_cache_ttl_placeholder')" :min="0" :format="false" fluid />
+                </div>
+              </div>
+
               <div class="flex flex-row gap-x-9 flex-wrap">
                 <div class="flex flex-col gap-2 basis-5/12 grow">
                   <div class="flex">

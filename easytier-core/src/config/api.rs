@@ -161,6 +161,7 @@ pub fn network_config_from_toml(config: &TomlConfig) -> NetworkConfig {
     // [PATCH] VPN DNS：随配置一并下发到客户端
     result.dns = Some(flags.dns.clone());
     result.peer_doh_server = Some(flags.peer_doh_server.clone());
+    result.peer_doh_cache_ttl = Some(flags.peer_doh_cache_ttl);
     result.mtu = Some(flags.mtu as i32);
     result.data_compress_algo = (flags.data_compress_algo != default_flags.data_compress_algo)
         .then_some(flags.data_compress_algo);

@@ -152,6 +152,7 @@ export function DEFAULT_NETWORK_CONFIG(): NetworkConfig {
     enable_magic_dns: false,
     dns: '',
     peer_doh_server: '',
+    peer_doh_cache_ttl: 0,
     enable_private_mode: false,
     port_forwards: [],
     acl: emptyAcl(),

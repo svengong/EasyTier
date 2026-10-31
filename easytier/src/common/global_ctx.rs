@@ -194,7 +194,10 @@ impl GlobalCtx {
         // [PATCH] 应用 DoH 配置：peer 域名解析优先走 DoH，避免系统 DNS 污染。
         // 空值表示不启用，沿用原有系统解析逻辑。
         #[cfg(all(feature = "doh", target_os = "android"))]
-        crate::common::dns::set_peer_doh_server(Some(flags.peer_doh_server.clone()));
+        {
+            crate::common::dns::set_peer_doh_server(Some(flags.peer_doh_server.clone()));
+            crate::common::dns::set_doh_cache_ttl(flags.peer_doh_cache_ttl);
+        }
 
         let (event_bus, _) = tokio::sync::broadcast::channel(16);
         GlobalCtx {

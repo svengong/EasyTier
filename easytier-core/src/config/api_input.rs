@@ -614,6 +614,10 @@ impl NetworkConfigExt for NetworkConfig {
             flags.peer_doh_server = doh;
         }
 
+        if let Some(ttl) = self.peer_doh_cache_ttl {
+            flags.peer_doh_cache_ttl = ttl;
+        }
+
         if let Some(mtu) = self.mtu {
             flags.mtu = mtu as u32;
         }
@@ -808,6 +812,7 @@ impl NetworkConfigExt for NetworkConfig {
         result.enable_magic_dns = Some(flags.accept_dns);
         result.dns = Some(flags.dns.clone());
         result.peer_doh_server = Some(flags.peer_doh_server.clone());
+    result.peer_doh_cache_ttl = Some(flags.peer_doh_cache_ttl);
         result.mtu = Some(flags.mtu as i32);
         result.data_compress_algo = (flags.data_compress_algo != default_flags.data_compress_algo)
             .then_some(flags.data_compress_algo);
