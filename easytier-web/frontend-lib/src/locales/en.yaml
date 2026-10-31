@@ -284,6 +284,15 @@ port_forwards_add_btn: "Add"
 edit_port_forward: "Edit Port Forward"
 
 mtu: MTU
+
+dns: DNS Server
+dns_help: |-
+  DNS pushed to the VPN.
+  Leave empty to use the system default (on phones this is the carrier DNS,
+  which may resolve overseas domains incorrectly).
+  Point it to your home gateway to get clean results via the center node.
+dns_placeholder: e.g. 192.168.31.1
+
 mtu_help: |
   MTU of the TUN device, default is 1380 for non-encryption, 1360 for encryption. Range:400-1380
 mtu_placeholder: Leave blank as default value 1380

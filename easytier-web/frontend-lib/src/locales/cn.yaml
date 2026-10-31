@@ -284,6 +284,14 @@ port_forwards_add_btn: "添加"
 edit_port_forward: "编辑端口转发"
 
 mtu: MTU
+
+dns: DNS 服务器
+dns_help: |-
+  VPN 建立时下发的 DNS。
+  留空则使用系统默认（手机上是运营商 DNS，境外域名解析可能被污染）。
+  指向家庭网关可从中心节点获得干净的解析结果。
+dns_placeholder: 如 192.168.31.1
+
 mtu_help: |
   TUN设备的MTU，默认为非加密时为1380，加密时为1360。范围：400-1380
 mtu_placeholder: 留空为默认值1380

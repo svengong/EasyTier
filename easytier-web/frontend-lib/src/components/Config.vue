@@ -492,6 +492,18 @@ function removeVpnPortalClient(index: number) {
                 </div>
               </div>
 
+              <!-- VPN DNS：Android/iOS 建立 VPN 时下发的 DNS 服务器 -->
+              <div class="flex flex-row gap-x-9 flex-wrap">
+                <div class="flex flex-col gap-2 basis-5/12 grow">
+                  <div class="flex">
+                    <label for="dns">{{ t('dns') }}</label>
+                    <span class="pi pi-question-circle ml-2 self-center" v-tooltip="t('dns_help')"></span>
+                  </div>
+                  <InputText id="dns" v-model="curNetwork.dns" aria-describedby="dns-help"
+                    :placeholder="t('dns_placeholder')" fluid />
+                </div>
+              </div>
+
               <div class="flex flex-row gap-x-9 flex-wrap">
                 <div class="flex flex-col gap-2 basis-5/12 grow">
                   <div class="flex">

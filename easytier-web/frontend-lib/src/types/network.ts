@@ -150,6 +150,7 @@ export function DEFAULT_NETWORK_CONFIG(): NetworkConfig {
     instance_recv_bps_limit: null,
     mapped_listeners: [],
     enable_magic_dns: false,
+    dns: '',
     enable_private_mode: false,
     port_forwards: [],
     acl: emptyAcl(),
@@ -312,6 +313,7 @@ export function normalizeNetworkConfig(config: NetworkConfig): NetworkConfig {
   normalized.instance_recv_bps_limit = normalizeUint64ForInput(
     normalized.instance_recv_bps_limit as any,
   )
+  normalized.dns ??= ''
   normalized.proxy_cidrs ??= []
   normalized.listener_urls ??= []
   normalized.relay_network_whitelist ??= []
