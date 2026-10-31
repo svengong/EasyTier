@@ -31,6 +31,9 @@ class TauriVpnService : VpnService() {
 
         private const val NOTIFICATION_CHANNEL_ID = "easytier_vpn_channel"
         private const val NOTIFICATION_ID = 1356
+
+        // [PATCH] 兜底 DNS：家庭网关（路由器上的 ShellCrash 负责代理分流）
+        private const val DEFAULT_DNS = "192.168.31.1"
     }
 
     private lateinit var vpnInterface: ParcelFileDescriptor
@@ -166,7 +169,13 @@ class TauriVpnService : VpnService() {
         
         var mtu = args?.getInt(MTU) ?: 1500
         var ipv4Addr = args?.getString(IPV4_ADDR) ?: "10.126.126.1/24"
-        var dns: String? = args?.getString(DNS)
+        // [PATCH] DNS 兜底：前端未传 dns 时使用家庭内网 DNS。
+        // 原因：Magic DNS(100.100.100.101) 的上游是"运行节点的系统 DNS"，
+        // 手机上即运营商 DNS，解析会被污染；且 EasyTier App 被
+        // disallowedApplications 豁免，其 DNS 查询不走 tun，到不了中心节点。
+        // 指向家庭网关后：系统 resolver 发起 → tun0 → 隧道 → 中心节点 → SNAT
+        // → 路由器代理，得到未被污染的解析结果。
+        var dns: String? = args?.getString(DNS) ?: DEFAULT_DNS
         var routes = args?.getStringArray(ROUTES) ?: emptyArray()
         var disallowedApplications = args?.getStringArray(DISALLOWED_APPLICATIONS) ?: emptyArray()
 
@@ -177,7 +186,20 @@ class TauriVpnService : VpnService() {
         val ipParts = ipv4Addr.split("/")
         if (ipParts.size != 2) throw IllegalArgumentException("Invalid IP addr string")
         builder.addAddress(ipParts[0], ipParts[1].toInt())
+        // [PATCH] IPv6 接管 + 黑洞化
+        // 只 addAddress 不加 addRoute，IPv6 流量会从物理网卡直出绕过 VPN
+        // （实测 4G 下 curl -6 直接拿到运营商 IPv6 地址）。
+        // [PATCH] IPv6 接管并黑洞化。
+        // Android 没有"禁用 IPv6"的 API，只能接管后丢弃——否则手机自身的
+        // IPv6 会从物理网卡直出，绕过隧道（实测 4G 下 curl -6 拿到运营商 IPv6）。
+        // 配合 EasyTier 配置 [flags] enable_ipv6 = false：
+        //   IPv6 包进 tun 后不被处理而丢弃，应用自动回退到 IPv4 走隧道。
         builder.addAddress("fd00::1", 128)
+        try {
+            builder.addRoute("::", 0)
+        } catch (e: Exception) {
+            println("vpn addRoute ipv6 failed: $e")
+        }
 
         builder.setMtu(mtu)
         dns?.let { builder.addDnsServer(it) }
