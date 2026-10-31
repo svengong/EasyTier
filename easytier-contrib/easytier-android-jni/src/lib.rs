@@ -29,6 +29,7 @@ mod error;
 mod json_rpc_api;
 mod logger;
 mod network_api;
+mod socket_protection;
 mod strings;
 
 use jni::JNIEnv;
@@ -268,4 +269,67 @@ pub extern "system" fn Java_com_easytier_jni_EasyTierJNI_isConfigServerClientCon
 ) -> jboolean {
     logger::init();
     config_server_api::is_config_server_client_connected_jni(env, class)
+}
+
+/// Register the calling `EasyTierVpnService` instance as the native socket protector.
+///
+/// Java signature:
+/// `EasyTierJNI.setSocketProtector(service: Object): Int`
+///
+/// Android 上，VPN 应用必须把"到服务器的连接"从 VPN 路由中豁免，否则这些连接
+/// 会被投回自己创建的 tun 设备形成死循环（AOSP: `VpnService.protect`）。
+/// 调用本方法后，EasyTier 每次创建 socket 都会回调 Java 侧的
+/// `EasyTierVpnService.protectSocketFd(fd)`。
+///
+/// @return 0 成功，-1 失败
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_easytier_jni_EasyTierJNI_setSocketProtector(
+    env: JNIEnv,
+    _class: JClass,
+    service: JObject,
+) -> jint {
+    logger::init();
+
+    if service.is_null() {
+        error::set_callback_error("setSocketProtector: service 为空".to_string());
+        return -1;
+    }
+
+    let global = match env.new_global_ref(&service) {
+        Ok(g) => g,
+        Err(e) => {
+            error::set_callback_error(format!("new_global_ref 失败: {e}"));
+            return -1;
+        }
+    };
+
+    match env.get_java_vm() {
+        Ok(vm) => socket_protection::set_java_vm(vm),
+        Err(e) => {
+            error::set_callback_error(format!("get_java_vm 失败: {e}"));
+            return -1;
+        }
+    }
+
+    match socket_protection::install(global) {
+        Ok(()) => 0,
+        Err(e) => {
+            error::set_callback_error(format!("install socket protector 失败: {e}"));
+            -1
+        }
+    }
+}
+
+/// Unregister the native socket protector.
+///
+/// Java signature:
+/// `EasyTierJNI.clearSocketProtector(): Int`
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_easytier_jni_EasyTierJNI_clearSocketProtector(
+    _env: JNIEnv,
+    _class: JClass,
+) -> jint {
+    logger::init();
+    socket_protection::uninstall();
+    0
 }

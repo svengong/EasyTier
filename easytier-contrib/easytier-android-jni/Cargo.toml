@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 # JNI 0.22 changes native entry points to EnvUnowned and Env.
 jni = "0.21.1"
+async-trait.workspace = true
 once_cell.workspace = true
 log.workspace = true
 android_logger = "0.15"

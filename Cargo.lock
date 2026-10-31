@@ -2651,6 +2651,7 @@ name = "easytier-android-jni"
 version = "0.1.0"
 dependencies = [
  "android_logger",
+ "async-trait",
  "easytier",
  "easytier-ffi",
  "jni 0.21.1",
