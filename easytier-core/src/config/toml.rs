@@ -56,6 +56,8 @@ pub fn gen_default_flags() -> Flags {
         accept_dns: false,
         // [PATCH] VPN 下发的 DNS，默认不指定
         dns: "".to_string(),
+        // [PATCH] DoH 服务器，默认不启用（沿用系统 DNS 解析 peer 域名）
+        peer_doh_server: "".to_string(),
         private_mode: false,
         enable_quic_proxy: false,
         disable_quic_input: false,

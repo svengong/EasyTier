@@ -151,6 +151,7 @@ export function DEFAULT_NETWORK_CONFIG(): NetworkConfig {
     mapped_listeners: [],
     enable_magic_dns: false,
     dns: '',
+    peer_doh_server: '',
     enable_private_mode: false,
     port_forwards: [],
     acl: emptyAcl(),
@@ -314,6 +315,7 @@ export function normalizeNetworkConfig(config: NetworkConfig): NetworkConfig {
     normalized.instance_recv_bps_limit as any,
   )
   normalized.dns ??= ''
+  normalized.peer_doh_server ??= ''
   normalized.proxy_cidrs ??= []
   normalized.listener_urls ??= []
   normalized.relay_network_whitelist ??= []

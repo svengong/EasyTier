@@ -91,6 +91,11 @@ message FlagsInConfig {
   // [PATCH] VPN 下发给客户端的 DNS 服务器（移动端建 VPN 时使用）。
   // 为空表示不指定，由客户端沿用系统 DNS。
   string dns = 45;
+
+  // [PATCH] DoH 服务器地址，用于解析 peer 配置里的域名。
+  // 为空时沿用系统 DNS 解析（可能被污染）。
+  // 例：https://doh.pub/dns-query
+  string peer_doh_server = 46;
 }
 
 message RpcDescriptor {

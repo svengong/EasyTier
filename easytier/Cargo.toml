@@ -324,6 +324,7 @@ default = [
     "quic",
     "faketcp",
     "magic-dns",
+    "doh",
     "zstd",
     "upnp",
     "icmp-proxy",
@@ -390,6 +391,8 @@ tracing = ["tokio/tracing", "dep:console-subscriber", "dep:tracing-subscriber"]
 tracing-log = ["tracing/log", "easytier-core/tracing-log"]
 logging = []
 dns-resolver = ["dep:hickory-proto", "dep:hickory-resolver"]
+# [PATCH] DoH 解析 peer 域名，避免系统 DNS 污染
+doh = ["dns-resolver", "hickory-resolver/https-ring"]
 magic-dns = [
     "dep:derive_builder",
     "dep:humantime-serde",

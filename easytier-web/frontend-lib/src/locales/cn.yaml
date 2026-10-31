@@ -290,6 +290,12 @@ dns_help: |-
   VPN 建立时下发的 DNS。
   留空则使用系统默认（手机上是运营商 DNS，境外域名解析可能被污染）。
   指向家庭网关可从中心节点获得干净的解析结果。
+peer_doh_server: DoH 服务器
+peer_doh_server_help: |-
+  解析 initial nodes 中的域名时优先使用 DoH。
+  留空则沿用系统 DNS（手机上可能被运营商污染，导致解析到错误地址）。
+  仅在地址为域名时生效；直接填 IP 不需要此项。
+peer_doh_server_placeholder: 如 https://doh.pub/dns-query
 dns_placeholder: 如 192.168.31.1
 
 mtu_help: |

@@ -504,6 +504,18 @@ function removeVpnPortalClient(index: number) {
                 </div>
               </div>
 
+              <!-- DoH：解析 initial nodes 中的域名，避免 DNS 污染 -->
+              <div class="flex flex-row gap-x-9 flex-wrap">
+                <div class="flex flex-col gap-2 basis-5/12 grow">
+                  <div class="flex">
+                    <label for="peer_doh_server">{{ t('peer_doh_server') }}</label>
+                    <span class="pi pi-question-circle ml-2 self-center" v-tooltip="t('peer_doh_server_help')"></span>
+                  </div>
+                  <InputText id="peer_doh_server" v-model="curNetwork.peer_doh_server"
+                    :placeholder="t('peer_doh_server_placeholder')" fluid />
+                </div>
+              </div>
+
               <div class="flex flex-row gap-x-9 flex-wrap">
                 <div class="flex flex-col gap-2 basis-5/12 grow">
                   <div class="flex">

@@ -110,6 +110,11 @@ message NetworkConfig {
   // 为空时回退到系统 DNS；手机上系统 DNS 即运营商 DNS，解析会被污染。
   // 指向家庭网关可让 DNS 查询经隧道到中心节点，由路由器透明代理分流。
   optional string dns = 73;
+
+  // [PATCH] DoH 服务器地址，用于解析 initial nodes 配置里的域名。
+  // 为空时沿用系统 DNS（可能被污染）。
+  // 例：https://doh.pub/dns-query
+  optional string peer_doh_server = 74;
 }
 
 message ManagedCredentialConfig {

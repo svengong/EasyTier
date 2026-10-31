@@ -291,6 +291,12 @@ dns_help: |-
   Leave empty to use the system default (on phones this is the carrier DNS,
   which may resolve overseas domains incorrectly).
   Point it to your home gateway to get clean results via the center node.
+peer_doh_server: DoH Server
+peer_doh_server_help: |-
+  Resolve domains in initial nodes via DoH.
+  Leave empty to use the system DNS (on phones this may be poisoned by the carrier, resolving to wrong addresses).
+  Only applies when the address is a domain; not needed if you use a raw IP.
+peer_doh_server_placeholder: e.g. https://doh.pub/dns-query
 dns_placeholder: e.g. 192.168.31.1
 
 mtu_help: |

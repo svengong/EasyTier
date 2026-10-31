@@ -461,6 +461,121 @@ async fn resolve_txt_record(domain_name: &str) -> Result<String, Error> {
     Ok(txt_data.to_string())
 }
 
+/// [PATCH] DoH 解析器缓存：按 DoH 地址复用，避免每次解析都重建连接池。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+static DOH_RESOLVERS: Lazy<
+    std::sync::Mutex<std::collections::HashMap<String, Arc<TokioResolver>>>,
+> = Lazy::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+/// [PATCH] 全局 DoH 服务器地址。
+///
+/// 由实例启动时通过 [`set_peer_doh_server`] 设置。为空表示不启用 DoH，
+/// 域名解析沿用系统 DNS。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+static PEER_DOH_SERVER: Lazy<std::sync::RwLock<Option<String>>> =
+    Lazy::new(|| std::sync::RwLock::new(None));
+
+/// [PATCH] 设置 peer 域名解析使用的 DoH 服务器。
+///
+/// 传空字符串或 `None` 表示关闭 DoH，回退到系统 DNS 解析。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+pub fn set_peer_doh_server(server: Option<String>) {
+    let normalized = server
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let mut guard = PEER_DOH_SERVER
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if *guard != normalized {
+        tracing::info!(?normalized, "peer doh server updated");
+        *guard = normalized;
+    }
+}
+
+/// [PATCH] 读取当前 DoH 服务器配置。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+pub fn peer_doh_server() -> Option<String> {
+    PEER_DOH_SERVER
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+}
+
+/// [PATCH] 为指定 DoH 地址构建（或复用）解析器。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+async fn doh_resolver_for(server: &str) -> Result<Arc<TokioResolver>, Error> {
+    // 先查缓存并立即释放锁，避免 MutexGuard 跨 await（会让 future 不是 Send）
+    {
+        let cache = DOH_RESOLVERS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(r) = cache.get(server) {
+            return Ok(r.clone());
+        }
+    }
+
+    let url = url::Url::parse(server).map_err(|e| {
+        tracing::error!(?e, server, "invalid doh server url");
+        Error::InvalidUrl(server.to_string())
+    })?;
+
+    let host = url
+        .host_str()
+        .ok_or_else(|| Error::InvalidUrl(server.to_string()))?
+        .to_string();
+    // DoH 的 host 需要先解析成 IP 才能填 socket_addr；
+    // 这里用系统 DNS 解析 DoH 服务器自身（doh.pub 这类公共服务通常解析正常）。
+    let doh_port = url.port().unwrap_or(443);
+    let doh_ip = tokio::net::lookup_host((host.as_str(), doh_port))
+        .await
+        .ok()
+        .and_then(|mut it| it.next())
+        .ok_or_else(|| {
+            tracing::error!(host, "failed to resolve doh server address");
+            Error::InvalidUrl(server.to_string())
+        })?;
+
+    let mut name_server = NameServerConfig::new(doh_ip, Protocol::Https);
+    name_server.tls_dns_name = Some(host.clone());
+    name_server.http_endpoint = Some(url.path().to_string());
+
+    let mut config = ResolverConfig::new();
+    config.add_name_server(name_server);
+    let mut options = ResolverOpts::default();
+    options.timeout = Duration::from_secs(5);
+    options.attempts = 2;
+
+    let resolver = TokioResolver::builder_with_config(config, TokioConnectionProvider::default())
+        .with_options(options)
+        .build();
+    let resolver = Arc::new(resolver);
+
+    tracing::info!(server, "doh resolver created");
+    // 再取锁写入（同样不跨 await）
+    {
+        let mut cache = DOH_RESOLVERS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        cache.insert(server.to_string(), resolver.clone());
+    }
+    Ok(resolver)
+}
+
+/// [PATCH] 使用 DoH 解析主机名。
+#[cfg(all(feature = "dns-resolver", feature = "doh"))]
+async fn resolve_via_doh(host: &str, port: u16, server: &str) -> Result<Vec<SocketAddr>, Error> {
+    let resolver = doh_resolver_for(server).await?;
+    let ips = resolver.lookup_ip(host).await.with_context(|| {
+        format!("doh lookup failed, host: {host}, server: {server}")
+    })?;
+    let addrs = ips
+        .iter()
+        .map(|ip| SocketAddr::new(ip, port))
+        .collect::<Vec<_>>();
+    tracing::debug!(?addrs, host, server, "doh lookup done");
+    Ok(addrs)
+}
+
 pub async fn socket_addrs(
     url: &url::Url,
     default_port_number: impl Fn() -> Option<u16>,
@@ -486,6 +601,17 @@ async fn socket_addrs_with_system_resolver(
         _ => {}
     }
     let host = host.to_string();
+
+    // [PATCH] 配置了 DoH 时优先使用，避免系统 DNS 被污染导致解析到错误地址。
+    // 解析失败则回落到原有逻辑，保证 DoH 不可用时不至于完全无法建连。
+    #[cfg(all(feature = "dns-resolver", feature = "doh"))]
+    if let Some(server) = peer_doh_server() {
+        match resolve_via_doh(&host, port, &server).await {
+            Ok(addrs) if !addrs.is_empty() => return Ok(addrs),
+            Ok(_) => tracing::warn!(host, server, "doh returned no address"),
+            Err(e) => tracing::warn!(?e, host, server, "doh lookup failed, fallback"),
+        }
+    }
 
     if allow_system_resolver {
         let socket_addr = format!("{}:{}", host, port);
