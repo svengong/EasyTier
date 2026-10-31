@@ -21,6 +21,23 @@ object EasyTierJNI {
     @JvmStatic external fun setTunFd(instanceName: String, fd: Int): Int
 
     /**
+     * [PATCH] 注册 socket 保护器，让 EasyTier 到服务器的连接绕开 VPN。
+     *
+     * Android 上全网关模式必须把隧道自身流量从 VPN 路由中豁免，否则会形成
+     * 「建连流量进 tun → 隧道未建立 → 死循环」。
+     *
+     * @param service EasyTierVpnService 实例，需实现 protectSocketFd(fd: Int): Boolean
+     * @return 0 表示成功，-1 表示失败
+     */
+    @JvmStatic external fun setSocketProtector(service: Any): Int
+
+    /**
+     * [PATCH] 注销 socket 保护器
+     * @return 0 表示成功
+     */
+    @JvmStatic external fun clearSocketProtector(): Int
+
+    /**
      * 解析配置字符串
      * @param config TOML 格式的配置字符串
      * @return 0 表示成功，-1 表示失败
