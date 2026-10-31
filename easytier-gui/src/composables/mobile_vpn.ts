@@ -404,7 +404,20 @@ async function reconcileNetworkInstance(instanceId: string, generation: number) 
 
   const routes = getRoutesForVpn(curNetworkInfo?.routes, config)
 
-  const dns = config.enable_magic_dns ? '100.100.100.101' : undefined
+  // [PATCH] DNS 让查询走隧道，拿到干净解析。
+  //
+  // 背景：Magic DNS(100.100.100.101) 的上游读的是"运行节点的系统 DNS"，
+  // 在手机上即运营商 DNS，解析会被污染；且 EasyTier App 被
+  // disallowedApplications 豁免，其发出的 DNS 查询不走 tun，永远到不了中心节点。
+  //
+  // 配置了 dns 后查询由系统 resolver 发起，走 tun0 → 隧道 → 中心节点 →
+  // 路由器代理，得到干净解析。
+  //
+  // 取值优先级：配置中的 dns > magic dns
+  const configuredDns = config.dns?.trim()
+  const dns = (configuredDns && configuredDns.length > 0)
+    ? configuredDns
+    : (config.enable_magic_dns ? '100.100.100.101' : undefined)
 
   const ipChanged = virtual_ip !== curVpnStatus.ipv4Addr
   const cidrChanged = network_length !== curVpnStatus.ipv4Cidr
