@@ -107,9 +107,22 @@ dependencies {
     implementation("androidx.webkit:webkit:1.6.1")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.8.0")
+    // [PATCH] EasyTier JNI：仅需 JSON 解析（protobuf 生成类已改为 Map 解析，无需 wire/protobuf 运行时）
+    implementation("com.squareup.moshi:moshi:1.15.1")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
 }
 
+
+// [PATCH] 跳过 tauri 的 rustBuild 任务：我们已用 cargo-ndk 手动编译好
+// libeasytier_android_jni.so 等产物并放入 jniLibs，无需再次调用 npm/tauri CLI
+// （pnpm workspace 环境下 npm run tauri 会失败）
 apply(from = "tauri.build.gradle.kts")
+
+afterEvaluate {
+    tasks.matching { it.name.startsWith("rustBuild") }.configureEach {
+        enabled = false
+    }
+}
+
