@@ -88,6 +88,9 @@ message FlagsInConfig {
   // Prefer direct credential peers that already relay to a destination over
   // advertising another direct edge to the same destination.
   bool prefer_peer_relay = 44;
+  // [PATCH] VPN 下发给客户端的 DNS 服务器（移动端建 VPN 时使用）。
+  // 为空表示不指定，由客户端沿用系统 DNS。
+  string dns = 45;
 }
 
 message RpcDescriptor {
